@@ -8,7 +8,7 @@ from contextlib import closing
 # from commpy.utilities import *
 from bitstring import BitArray
 import socket
-ser = serial.Serial(port="/dev/serial0", baudrate=1151200)
+ser = serial.Serial(port="/dev/serial0", baudrate=115200)
 #ser.flushInput()
 #ser.flushOutput()
 
