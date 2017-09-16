@@ -9,7 +9,7 @@ from Queue import Queue
 import threading
 import socket
 
-ser = serial.Serial(port="/dev/serial0", baudrate=1151200)
+ser = serial.Serial(port="/dev/serial0", baudrate=115200)
 
 socket.setdefaulttimeout(3)
 
