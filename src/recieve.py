@@ -59,6 +59,23 @@ def check(payload):
     else:
         print(payload.decode("utf-8"))
         return True
+
+def messageUnpackerSender(packed,pcktsize,counterqueue,tcpQueue):
+    if not packed:
+        return
+    if len(packed)<pcktsize:
+        packed+=struct.pack("B",0)*(pcktsize-len(packed))
+    decoded=decode(packed[:pcktsize])
+    try:
+        finalData = decompress(decoded)
+    except:
+        print("error %s" % sys.exc_info()[0])
+    else:
+        counterqueue.get()
+        counterqueue.put(time.time())
+        if check(finalData):
+            tcpQueue.put(finalData)
+
 class reciever(object):
     def __init__(self, frmsize, frmsync):
         self.buffer = b""
@@ -90,7 +107,7 @@ class reciever(object):
                 if pcktnum!=self.packetnumber:
 
                     #decode the buffer to see if you have enough info to make a messege
-                    # decode(self.buffer,pcktsize)
+                    messageUnpackerSender(self.buffer, pcktsize, counterqueue,tcpQueue)
                     self.packetnumber=pcktnum
                     self.buffer=b""
                 pcktsize = struct.unpack("H",decoded_header[1:3])[0]
@@ -100,18 +117,9 @@ class reciever(object):
                 if len(self.buffer)>=pcktsize:
                     # print(len(self.buffer),pcktsize*2)
                     # check(decompress(decode(self.buffer[:pcktsize])))
-                    try:
-                        finalData=decompress(decode(self.buffer[:pcktsize]))
-                    except:
-                        print("error %s"%sys.exc_info()[0])
-                    else:
-                        counterqueue.get()
-                        counterqueue.put(time.time())
-                        if check(finalData):
-                            tcpQueue.put(finalData)
-                    finally:
-                        self.buffer=b""
-                        self.packetnumber = b"-1"
+                    messageUnpackerSender(self.buffer,pcktsize,counterqueue,tcpQueue)
+                    self.buffer=b""
+                    self.packetnumber = b"-1"
                 mode="framesync"
 
 def HB(counterqueue):
