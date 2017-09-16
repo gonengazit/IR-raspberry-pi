@@ -183,13 +183,30 @@ globalqueue=Queue()
 tcpQueue=Queue()
 globalqueue.put(time.time())
 recieverThread=threading.Thread(target=a.recieve,args=(globalqueue,tcpQueue))
+recieverThread.daemon=True
 HBThread=threading.Thread(target=HB,args=(globalqueue,))
+HBThread.daemon=True
 tcpThread=threading.Thread(target=send,args=(tcpQueue,))
+tcpThread.daemon=True
 
 recieverThread.start()
 HBThread.start()
 tcpThread.start()
-
+while True:
+    for i in (tcpThread,recieverThread,HBThread):
+        try:
+            i.join(1)
+            if not i.isAlive():
+                break
+        except KeyboardInterrupt:
+            print("\nGoodBye")
+            break
+        except:
+            print("error")
+            break
+    else:
+        continue
+    break
 
 # while True:
 # 	a=ser.in_waiting
