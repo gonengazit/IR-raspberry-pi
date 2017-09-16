@@ -104,6 +104,6 @@ with closing(s):
             for i in a.fragment(encodedData):
                 ser.write(i)
             if not heartbeat:
-                print("sent messege of %d bits"%len(compressedData))
+                print("sent messege of %d bytes"%len(compressedData))
 # while True:
 #     ser.write(raw_input("what do you what to transmit?   "))
