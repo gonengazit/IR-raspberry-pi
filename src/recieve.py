@@ -8,6 +8,14 @@ from bitstring import BitArray
 from Queue import Queue
 import threading
 import socket
+import RPi.GPIO as gpio
+
+gpio.setmode(gpio.BCM)
+gpio.setup(18,gpio.OUT)
+gpio.setup(23,gpio.OUT)
+
+gpio.output(18, False)
+gpio.output(23, False)
 
 ser = serial.Serial(port="/dev/serial0", baudrate=115200)
 
@@ -69,6 +77,9 @@ def messageUnpackerSender(packed,pcktsize,counterqueue,tcpQueue):
     try:
         finalData = decompress(decoded)
     except:
+        gpio.output(18,True)
+        time.sleep(.01)
+        gpio.output(18,False)
         print("error %s" % sys.exc_info()[0])
     else:
         counterqueue.get()
@@ -101,6 +112,9 @@ class reciever(object):
                 mode = "message"
             elif mode=="message":
                 message=ser.read(self.framesize*2)
+                gpio.output(23, True)
+                time.sleep(.01)
+                gpio.output(23, False)
                 header,payload=deinterlieve2(message)
                 decoded_header=decode(header)
                 pcktnum=decoded_header[0]
@@ -127,8 +141,10 @@ def HB(counterqueue):
         gcounter=counterqueue.get()
         counterqueue.put(gcounter)
         if time.time()-gcounter>5:
-            print("error, no heartbeat recieved %d"%(time.time()-gcounter))
-
+            # print("error, no heartbeat recieved %d"%(time.time()-gcounter))
+            gpio.output(18, True)
+        else:
+            gpio.output(18, False)
         time.sleep(.1)
 
 def send(tcpQueue):
@@ -145,6 +161,9 @@ def send(tcpQueue):
             try:
                 s.connect((TCP_IP, TCP_PORT))
             except (socket.error,socket.timeout) as e:
+                gpio.output(18, True)
+                time.sleep(.01)
+                gpio.output(18, False)
                 print("error")
                 print(str(e))
             else:
@@ -158,16 +177,25 @@ def send(tcpQueue):
                     s.send(MESSAGE)
 
                     data=s.recv(BUFFER_SIZE)
-                except socket.timeout as e:
+                except (socket.timeout,socket.error) as e:
+                    gpio.output(18, True)
+                    time.sleep(.01)
+                    gpio.output(18, False)
                     print(str(e))
                 else:
                     counter += 1
                     print(counter)
                     if data[9:17]==b"200 OK\r\n":
+                        gpio.output(23, True)
+                        time.sleep(.01)
+                        gpio.output(23, False)
                         print("OK recieved")
                         print(data.decode("utf-8"))
                         break
                     else:
+                        gpio.output(18, True)
+                        time.sleep(.01)
+                        gpio.output(18, False)
                         print("no OK")
                         print(data.decode("utf-8"))
             else:
@@ -182,11 +210,11 @@ a=reciever(15,"01"*4+"0011"*2+"11"*4)
 globalqueue=Queue()
 tcpQueue=Queue()
 globalqueue.put(time.time())
-recieverThread=threading.Thread(target=a.recieve,args=(globalqueue,tcpQueue))
+recieverThread=threading.Thread(target=a.recieve,args=(globalqueue,tcpQueue),name="reciever-thread")
 recieverThread.daemon=True
-HBThread=threading.Thread(target=HB,args=(globalqueue,))
+HBThread=threading.Thread(target=HB,args=(globalqueue,),name="heartbeat-thread")
 HBThread.daemon=True
-tcpThread=threading.Thread(target=send,args=(tcpQueue,))
+tcpThread=threading.Thread(target=send,args=(tcpQueue,),name="TCP-thread")
 tcpThread.daemon=True
 
 recieverThread.start()
@@ -199,10 +227,12 @@ while True:
             if not i.isAlive():
                 break
         except KeyboardInterrupt:
+            gpio.cleanup()
             print("\nGoodBye")
             break
         except:
             print("error")
+            gpio.output(18, True)
             break
     else:
         continue
