@@ -20,6 +20,10 @@ gpio.output(23, False)
 ser = serial.Serial(port="/dev/serial0", baudrate=115200)
 
 socket.setdefaulttimeout(3)
+def blink(port):
+    gpio.output(port, True)
+    time.sleep(.01)
+    gpio.output(port, False)
 
 def deinterlieve(bits,n):
     cutoff=bits.size-(len(bits)%n)
@@ -77,9 +81,7 @@ def messageUnpackerSender(packed,pcktsize,counterqueue,tcpQueue):
     try:
         finalData = decompress(decoded)
     except:
-        gpio.output(18,True)
-        time.sleep(.01)
-        gpio.output(18,False)
+        blink(18)
         print("error %s" % sys.exc_info()[0])
     else:
         counterqueue.get()
@@ -112,9 +114,7 @@ class reciever(object):
                 mode = "message"
             elif mode=="message":
                 message=ser.read(self.framesize*2)
-                gpio.output(23, True)
-                time.sleep(.01)
-                gpio.output(23, False)
+                blink(23)
                 header,payload=deinterlieve2(message)
                 decoded_header=decode(header)
                 pcktnum=decoded_header[0]
@@ -161,9 +161,7 @@ def send(tcpQueue):
             try:
                 s.connect((TCP_IP, TCP_PORT))
             except (socket.error,socket.timeout) as e:
-                gpio.output(18, True)
-                time.sleep(.01)
-                gpio.output(18, False)
+                blink(18)
                 print("error")
                 print(str(e))
             else:
@@ -178,24 +176,18 @@ def send(tcpQueue):
 
                     data=s.recv(BUFFER_SIZE)
                 except (socket.timeout,socket.error) as e:
-                    gpio.output(18, True)
-                    time.sleep(.01)
-                    gpio.output(18, False)
+                    blink(18)
                     print(str(e))
                 else:
                     counter += 1
                     print(counter)
                     if data[9:17]==b"200 OK\r\n":
-                        gpio.output(23, True)
-                        time.sleep(.01)
-                        gpio.output(23, False)
+                        blink(23)
                         print("OK recieved")
                         print(data.decode("utf-8"))
                         break
                     else:
-                        gpio.output(18, True)
-                        time.sleep(.01)
-                        gpio.output(18, False)
+                        blink(18)
                         print("no OK")
                         print(data.decode("utf-8"))
             else:
