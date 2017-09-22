@@ -19,6 +19,10 @@ gpio.output(23, False)
 ser = serial.Serial(port="/dev/serial0", baudrate=115200)
 #ser.flushInput()
 #ser.flushOutput()
+def blink(port):
+    gpio.output(port, True)
+    time.sleep(.01)
+    gpio.output(port, False)
 
 def interlieve(bits,n):
     cutoff=bits.size-(len(bits)%n)
@@ -111,9 +115,7 @@ with socketcontext(s):
             try:
                 conn.send(HTTPrequest.format(date=datetime.datetime.now(pytz.timezone("GMT")),id=ID))
             except (socket.error,socket.timeout) as e:
-                gpio.output(18, True)
-                time.sleep(.01)
-                gpio.output(18, False)
+                blink(18)
                 print(str(e))
             else:
                 ID+=1
@@ -125,9 +127,7 @@ with socketcontext(s):
             # encodedData=encode(data)
             for i in a.fragment(encodedData):
                 ser.write(i)
-                gpio.output(23, True)
-                time.sleep(.01)
-                gpio.output(23, False)
+                blink(23)
             if not heartbeat:
                 print("sent messege of %d bytes"%len(compressedData))
 # while True:
