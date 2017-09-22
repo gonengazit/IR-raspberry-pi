@@ -2,12 +2,20 @@ import serial,time,string,random,struct,datetime,pytz
 from lz4.frame import compress,decompress
 import numpy as np
 from numpy.matlib import repmat
-from contextlib import closing
+from contextlib import closing,contextmanager
 
 # from commpy.channelcoding.convcode import Trellis,conv_encode,viterbi_decode
 # from commpy.utilities import *
 from bitstring import BitArray
 import socket
+import RPi.GPIO as gpio
+
+gpio.setmode(gpio.BCM)
+gpio.setup(18,gpio.OUT)
+gpio.setup(23,gpio.OUT)
+
+gpio.output(18, False)
+gpio.output(23, False)
 ser = serial.Serial(port="/dev/serial0", baudrate=115200)
 #ser.flushInput()
 #ser.flushOutput()
@@ -61,6 +69,18 @@ class fragmenter(object):
         self.packetnumber =(self.packetnumber+1)%256
         # print([(len(i),self.framesize+8) for i in newdata ])
         return newdata
+
+@contextmanager
+def socketcontext(skt):
+    try:
+        yield s
+    except Exception:
+        gpio.output(18, True)
+    except KeyboardInterrupt:
+        gpio.cleanup()
+        print("\nGoodbye")
+    finally:
+        s.close()
 #all bytes of framesync must be unique
 a=fragmenter(15,"01"*4+"0011"*2+"11"*4)
 socket.setdefaulttimeout(1)
@@ -76,7 +96,7 @@ ID=1754122158
 dateFormat="%a, %d %b %Y %H:%M:%S %Z"
 HTTPrequest=b"HTTP/1.1 200 OK\r\nCache-Control: no-cache, no-store\r\nPragma: no-cache\r\nContent-Length: 30\r\nContent-Type: text/html; charset=iso-8859-8\r\nExpires: -1\r\nServer: Microsoft-IIS/8.5\r\nX-AspNet-Version: 4.0.30319\r\nSet-Cookie: ASP.NET_SessionId=5jxc42k1m04pa30weih5y43s; path=/; HttpOnly\r\nX-Powered-By: ASP.NET\r\nDate: {date:%a, %d %b %Y %H:%M:%S %Z}\r\n\r\n0: Message sent, ID={id}"
 
-with closing(s):
+with socketcontext(s):
     while True:
         heartbeat=False
         try:
@@ -91,6 +111,9 @@ with closing(s):
             try:
                 conn.send(HTTPrequest.format(date=datetime.datetime.now(pytz.timezone("GMT")),id=ID))
             except (socket.error,socket.timeout) as e:
+                gpio.output(18, True)
+                time.sleep(.01)
+                gpio.output(18, False)
                 print(str(e))
             else:
                 ID+=1
@@ -100,9 +123,11 @@ with closing(s):
             compressedData=compress(data, content_checksum=1)
             encodedData=encode(compressedData)
             # encodedData=encode(data)
-
             for i in a.fragment(encodedData):
                 ser.write(i)
+                gpio.output(23, True)
+                time.sleep(.01)
+                gpio.output(23, False)
             if not heartbeat:
                 print("sent messege of %d bytes"%len(compressedData))
 # while True:
