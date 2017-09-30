@@ -248,6 +248,7 @@ while True:
         try:
             i.join(1)
             if not i.isAlive():
+		gpio.output(23, False)
                 gpio.output(18, True)
                 break
         except KeyboardInterrupt:
@@ -256,6 +257,7 @@ while True:
             break
         except:
             print("error")
+	    gpio.output(23, False)
             gpio.output(18, True)
             break
     else:
