@@ -5,7 +5,7 @@ import numpy as np
 # import commpy.channelcoding.convcode as cc
 # from commpy.utilities import *
 from bitstring import BitArray
-from Queue import Queue
+from Queue import Queue,Empty
 import threading
 import socket
 import RPi.GPIO as gpio
@@ -20,10 +20,27 @@ gpio.output(23, False)
 ser = serial.Serial(port="/dev/serial0", baudrate=115200)
 
 socket.setdefaulttimeout(3)
-def blink(port):
-    gpio.output(port, True)
-    time.sleep(.01)
-    gpio.output(port, False)
+# def blink(port):
+#     gpio.output(port, True)
+#     time.sleep(.02)
+#     gpio.output(port, False)
+#     time.sleep(.02)
+
+def blink(q,port):
+    while True:
+        count=0
+        q.get()
+        while count<3:
+            try:
+                q.get_nowait()
+            except Empty:
+                gpio.output(port, True)
+                time.sleep(.05)
+                gpio.output(port, False)
+                time.sleep(.05)
+                count+=1
+            else:
+                count=0
 
 def deinterlieve(bits,n):
     cutoff=bits.size-(len(bits)%n)
@@ -72,7 +89,7 @@ def check(payload):
         print(payload.decode("utf-8"))
         return True
 
-def messageUnpackerSender(packed,pcktsize,counterqueue,tcpQueue):
+def messageUnpackerSender(packed,pcktsize,counterqueue,tcpQueue,redQueue):
     if not packed:
         return
     if len(packed)<pcktsize:
@@ -81,7 +98,7 @@ def messageUnpackerSender(packed,pcktsize,counterqueue,tcpQueue):
     try:
         finalData = decompress(decoded)
     except:
-        blink(18)
+        redQueue.put(1)
         print("error %s" % sys.exc_info()[0])
     else:
         counterqueue.get()
@@ -95,7 +112,7 @@ class reciever(object):
         self.framesize = frmsize
         self.framesync=struct.pack("I",int(frmsync,2))[1:]
         self.packetnumber=struct.pack("B",0)
-    def recieve(self,counterqueue,tcpQueue):
+    def recieve(self,counterqueue,tcpQueue,redQueue,blueQueue):
         idx=0
         mode="framesync"
         pcktsize=0
@@ -114,14 +131,14 @@ class reciever(object):
                 mode = "message"
             elif mode=="message":
                 message=ser.read(self.framesize*2)
-                blink(23)
+                blueQueue.put(1)
                 header,payload=deinterlieve2(message)
                 decoded_header=decode(header)
                 pcktnum=decoded_header[0]
                 if pcktnum!=self.packetnumber:
 
                     #decode the buffer to see if you have enough info to make a messege
-                    messageUnpackerSender(self.buffer, pcktsize, counterqueue,tcpQueue)
+                    messageUnpackerSender(self.buffer, pcktsize, counterqueue,tcpQueue,redQueue)
                     self.packetnumber=pcktnum
                     self.buffer=b""
                 pcktsize = struct.unpack("H",decoded_header[1:3])[0]
@@ -131,7 +148,7 @@ class reciever(object):
                 if len(self.buffer)>=pcktsize:
                     # print(len(self.buffer),pcktsize*2)
                     # check(decompress(decode(self.buffer[:pcktsize])))
-                    messageUnpackerSender(self.buffer,pcktsize,counterqueue,tcpQueue)
+                    messageUnpackerSender(self.buffer,pcktsize,counterqueue,tcpQueue,redQueue)
                     self.buffer=b""
                     self.packetnumber = b"-1"
                 mode="framesync"
@@ -147,7 +164,7 @@ def HB(counterqueue):
             gpio.output(18, False)
         time.sleep(.1)
 
-def send(tcpQueue):
+def send(tcpQueue,redQueue,blueQueue):
     TCP_IP = '20.0.0.3'
     TCP_PORT = 8000
     BUFFER_SIZE = 4096
@@ -161,9 +178,10 @@ def send(tcpQueue):
             try:
                 s.connect((TCP_IP, TCP_PORT))
             except (socket.error,socket.timeout) as e:
-                blink(18)
-                print("error")
-                print(str(e))
+                redQueue.put(1)
+                print "error", str(e)
+                
+		
             else:
                 break
         else:
@@ -176,18 +194,18 @@ def send(tcpQueue):
 
                     data=s.recv(BUFFER_SIZE)
                 except (socket.timeout,socket.error) as e:
-                    blink(18)
+                    redQueue.put(1)
                     print(str(e))
                 else:
                     counter += 1
                     print(counter)
                     if data[9:17]==b"200 OK\r\n":
-                        blink(23)
+                        blueQueue.put(1)
                         print("OK recieved")
                         print(data.decode("utf-8"))
                         break
                     else:
-                        blink(18)
+                        redQueue.put(1)
                         print("no OK")
                         print(data.decode("utf-8"))
             else:
@@ -201,22 +219,36 @@ a=reciever(15,"01"*4+"0011"*2+"11"*4)
 
 globalqueue=Queue()
 tcpQueue=Queue()
+redQueue=Queue()
+blueQueue=Queue()
 globalqueue.put(time.time())
-recieverThread=threading.Thread(target=a.recieve,args=(globalqueue,tcpQueue),name="reciever-thread")
+
+recieverThread=threading.Thread(target=a.recieve,args=(globalqueue,tcpQueue,redQueue,blueQueue),name="reciever-thread")
 recieverThread.daemon=True
-HBThread=threading.Thread(target=HB,args=(globalqueue,),name="heartbeat-thread")
+
+HBThread=threading.Thread(target=HB,args=(globalqueue,),name="Heartbeat-thread")
 HBThread.daemon=True
-tcpThread=threading.Thread(target=send,args=(tcpQueue,),name="TCP-thread")
+
+tcpThread=threading.Thread(target=send,args=(tcpQueue,redQueue,blueQueue),name="TCP-thread")
 tcpThread.daemon=True
+
+redThread=threading.Thread(target=blink,args=(redQueue,18),name="Red-LED-thread")
+redThread.daemon=True
+
+blueThread=threading.Thread(target=blink,args=(blueQueue,23),name="Blue-LED-thread")
+blueThread.daemon=True
 
 recieverThread.start()
 HBThread.start()
 tcpThread.start()
+redThread.start()
+blueThread.start()
 while True:
-    for i in (tcpThread,recieverThread,HBThread):
+    for i in (tcpThread,recieverThread,HBThread,redThread,blueThread):
         try:
             i.join(1)
             if not i.isAlive():
+                gpio.output(18, True)
                 break
         except KeyboardInterrupt:
             gpio.cleanup()
