@@ -179,7 +179,9 @@ def send(tcpQueue,redQueue,blueQueue):
                 s.connect((TCP_IP, TCP_PORT))
             except (socket.error,socket.timeout) as e:
                 redQueue.put(1)
-                print "error", str(e)
+                print "error:", str(e)
+                s.close()
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 
 		
             else:
@@ -248,7 +250,7 @@ while True:
         try:
             i.join(1)
             if not i.isAlive():
-		gpio.output(23, False)
+                gpio.output(23,False)
                 gpio.output(18, True)
                 break
         except KeyboardInterrupt:
@@ -257,7 +259,7 @@ while True:
             break
         except:
             print("error")
-	    gpio.output(23, False)
+            gpio.output(23, False)
             gpio.output(18, True)
             break
     else:
